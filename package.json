@@ -1,0 +1,28 @@
+{
+  "name": "opinionator",
+  "version": "1.0.0",
+  "description": "Opinionated formatter based on my conding style for javascript",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "opinionator": "bin/opinionator.js"
+  },
+  "scripts": {
+    "test": "node --test --experimental-test-isolation=none \"test/rules/*.test.js\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mhuensch/opinionator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mhuensch/opinionator/issues"
+  },
+  "homepage": "https://github.com/mhuensch/opinionator#readme",
+  "dependencies": {
+    "@babel/parser": "^7.29.0",
+    "recast": "^0.23.11"
+  }
+}
