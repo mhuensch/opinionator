@@ -25,16 +25,68 @@ export async function format ( source, options = {} ) {
     formatted = restorePlaceholders( formatted, placeholders )
   }
 
-  if ( result.warnings && result.warnings.length > 0 ) {
-    for ( const warning of result.warnings ) {
+  const warnings = result.warnings || []
+  const naming_errors = warnings.filter( ( w ) => w.startsWith( 'Naming:' ) )
+  const nesting_errors = warnings.filter( ( w ) => w.startsWith( 'Nesting:' ) )
+  const truthy_errors = warnings.filter( ( w ) => w.startsWith( 'Implicit truthy:' ) )
+  const async_foreach_errors = warnings.filter( ( w ) => w.startsWith( 'Async forEach:' ) )
+  const floating_promise_errors = warnings.filter( ( w ) => w.startsWith( 'Floating promise:' ) )
+  const swallowed_error_errors = warnings.filter( ( w ) => w.startsWith( 'Swallowed error:' ) )
+
+  if ( warnings.length > 0 ) {
+    for ( const warning of warnings ) {
       process.stderr.write( 'opinionator: ' + warning + NL )
     }
   }
+
   const changed = formatted !== source
   const format_result =
     { code: formatted
     , changed: changed
+    , warnings: warnings
     }
+
+  if ( naming_errors.length > 0 ) {
+    const err = new Error( 'Naming convention violations found:\n' + naming_errors.join( '\n' ) )
+    err.code = 'NAMING_VIOLATION'
+    err.result = format_result
+    throw err
+  }
+
+  if ( nesting_errors.length > 0 ) {
+    const err = new Error( 'Nesting violations found:\n' + nesting_errors.join( '\n' ) )
+    err.code = 'NESTING_VIOLATION'
+    err.result = format_result
+    throw err
+  }
+
+  if ( truthy_errors.length > 0 ) {
+    const err = new Error( 'Implicit truthy check violations found:\n' + truthy_errors.join( '\n' ) )
+    err.code = 'TRUTHY_CHECK'
+    err.result = format_result
+    throw err
+  }
+
+  if ( async_foreach_errors.length > 0 ) {
+    const err = new Error( 'Async forEach violations found:\n' + async_foreach_errors.join( '\n' ) )
+    err.code = 'ASYNC_FOREACH'
+    err.result = format_result
+    throw err
+  }
+
+  if ( floating_promise_errors.length > 0 ) {
+    const err = new Error( 'Floating promise violations found:\n' + floating_promise_errors.join( '\n' ) )
+    err.code = 'FLOATING_PROMISE'
+    err.result = format_result
+    throw err
+  }
+
+  if ( swallowed_error_errors.length > 0 ) {
+    const err = new Error( 'Swallowed error violations found:\n' + swallowed_error_errors.join( '\n' ) )
+    err.code = 'SWALLOWED_ERROR'
+    err.result = format_result
+    throw err
+  }
 
   return format_result
 }

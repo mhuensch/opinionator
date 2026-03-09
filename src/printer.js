@@ -107,6 +107,9 @@ class Printer {
     this.depth = 0
     this.output = ''
     this.warnings = []
+    this.if_depth = 0
+    this.in_chain = false
+    this.chain_prefix_len = 0
   }
 
   indent () {
@@ -257,6 +260,9 @@ class Printer {
         }
         else if ( is_top_level && this.isTopLevelFunctionLike( stmts[this.findPrevIndex( stmts, i )] ) ) {
           this.emitLine()
+          this.emitLine()
+        }
+        else if ( is_top_level && stmt.type === 'ExpressionStatement' && prev_type === 'ExpressionStatement' ) {
           this.emitLine()
         }
         else if ( this.needsBlankLineBefore( stmt, stmts, i ) ) {
@@ -524,6 +530,10 @@ class Printer {
       return 'node:' + source
     }
 
+    if ( ( source.startsWith( '.' ) || source.startsWith( '/' ) ) && /\.[a-zA-Z]+$/.test( source ) === false ) {
+      return source + '.js'
+    }
+
     return source
   }
 
@@ -646,8 +656,11 @@ class Printer {
         }
       }
       else {
+        const decl_prefix = kind + ' ' + transformed_name + ' = '
+        this.chain_prefix_len = decl_prefix.length
         const init_str = this.printExpression( decl.init )
-        const full_line = kind + ' ' + transformed_name + ' = ' + init_str
+        this.chain_prefix_len = 0
+        const full_line = decl_prefix + init_str
         this.emit( prefix + full_line + NL )
       }
     }
@@ -675,7 +688,10 @@ class Printer {
         return name
       }
 
-      return toSnakeCase( name )
+      const expected = toSnakeCase( name )
+      if ( expected !== name ) {
+        this.warn( 'Naming: variable \'' + name + '\' should be snake_case. Rename to \'' + expected + '\'' )
+      }
     }
 
     return name
@@ -714,7 +730,13 @@ class Printer {
     const prefix = no_indent ? '' : this.indent()
     const async_str = node.async ? 'async ' : ''
     const generator_str = node.generator ? '*' : ''
-    const name = node.id ? toCamelCase( node.id.name ) : ''
+    const name = node.id ? node.id.name : ''
+    if ( name ) {
+      const expected = toCamelCase( name )
+      if ( expected !== name ) {
+        this.warn( 'Naming: function \'' + name + '\' should be camelCase. Rename to \'' + expected + '\'' )
+      }
+    }
     const params = this.printParams( node.params )
     const params_str = params === '' ? '()' : '( ' + params + ' )'
     const head = async_str + 'function' + generator_str + ' ' + name + ' ' + params_str + ' {'
@@ -786,7 +808,13 @@ class Printer {
       no_indent = false
     }
     const prefix = no_indent ? '' : this.indent()
-    const name = node.id ? toPascalCase( node.id.name ) : ''
+    const name = node.id ? node.id.name : ''
+    if ( name ) {
+      const expected = toPascalCase( name )
+      if ( expected !== name ) {
+        this.warn( 'Naming: class \'' + name + '\' should be PascalCase. Rename to \'' + expected + '\'' )
+      }
+    }
     let head = 'class ' + name
     if ( node.superClass ) {
       head += ' extends ' + this.printExpression( node.superClass )
@@ -847,14 +875,17 @@ class Printer {
     }
 
     if ( node.computed === false && node.key.type === 'Identifier' ) {
-      if ( node.kind === 'constructor' ) {
-        name = 'constructor'
-      }
-      else if ( name.startsWith( '_' ) ) {
-        name = '_' + toCamelCase( name.slice( 1 ) )
-      }
-      else {
-        name = toCamelCase( name )
+      if ( node.kind !== 'constructor' ) {
+        let expected
+        if ( name.startsWith( '_' ) ) {
+          expected = '_' + toCamelCase( name.slice( 1 ) )
+        }
+        else {
+          expected = toCamelCase( name )
+        }
+        if ( expected !== name ) {
+          this.warn( 'Naming: method \'' + name + '\' should be camelCase. Rename to \'' + expected + '\'' )
+        }
       }
     }
     const generator_str = node.generator ? '*' : ''
@@ -909,9 +940,20 @@ class Printer {
     this.printStatementList( stmts, false )
   }
 
+  checkImplicitTruthy ( node ) {
+    if ( node.type === 'Identifier' || node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression' ) {
+      this.warn( 'Implicit truthy: \'' + this.printExpression( node ) + '\' used as condition. Use an explicit comparison (e.g. != null, === true, > 0).' )
+    }
+  }
+
   printIfStatement ( node ) {
+    if ( this.if_depth > 0 ) {
+      this.warn( 'Nesting: if statement is nested inside another if statement. Consider flattening with a guard clause or combining conditions.' )
+    }
+    this.checkImplicitTruthy( node.test )
     const condition = this.printExpression( node.test )
     this.emitLine( 'if ( ' + condition + ' ) {' )
+    this.if_depth++
     this.depth++
     if ( node.consequent.type === 'BlockStatement' ) {
       this.printBlockBody( node.consequent.body )
@@ -923,6 +965,7 @@ class Printer {
     if ( node.alternate ) {
       if ( node.alternate.type === 'IfStatement' ) {
         this.emitLine( '}' )
+        this.checkImplicitTruthy( node.alternate.test )
         const alt_condition = this.printExpression( node.alternate.test )
         this.emitLine( 'else if ( ' + alt_condition + ' ) {' )
         this.depth++
@@ -957,11 +1000,13 @@ class Printer {
     else {
       this.emitLine( '}' )
     }
+    this.if_depth--
   }
 
   printElseChain ( node ) {
     if ( node.type === 'IfStatement' ) {
       this.emitLine( '}' )
+      this.checkImplicitTruthy( node.test )
       const condition = this.printExpression( node.test )
       this.emitLine( 'else if ( ' + condition + ' ) {' )
       this.depth++
@@ -994,18 +1039,27 @@ class Printer {
     }
   }
 
+  withResetIfDepth ( fn ) {
+    const saved = this.if_depth
+    this.if_depth = 0
+    fn()
+    this.if_depth = saved
+  }
+
   printForStatement ( node ) {
     const init = node.init ? this.printForInit( node.init ) : ''
     const test = node.test ? this.printExpression( node.test ) : ''
     const update = node.update ? this.printExpression( node.update ) : ''
     this.emitLine( 'for ( ' + init + '; ' + test + '; ' + update + ' ) {' )
     this.depth++
-    if ( node.body.type === 'BlockStatement' ) {
-      this.printBlockBody( node.body.body )
-    }
-    else {
-      this.printStatement( node.body )
-    }
+    this.withResetIfDepth( () => {
+      if ( node.body.type === 'BlockStatement' ) {
+        this.printBlockBody( node.body.body )
+      }
+      else {
+        this.printStatement( node.body )
+      }
+    } )
     this.depth--
     this.emitLine( '}' )
   }
@@ -1036,12 +1090,14 @@ class Printer {
     const right = this.printExpression( node.right )
     this.emitLine( 'for ( ' + left + ' in ' + right + ' ) {' )
     this.depth++
-    if ( node.body.type === 'BlockStatement' ) {
-      this.printBlockBody( node.body.body )
-    }
-    else {
-      this.printStatement( node.body )
-    }
+    this.withResetIfDepth( () => {
+      if ( node.body.type === 'BlockStatement' ) {
+        this.printBlockBody( node.body.body )
+      }
+      else {
+        this.printStatement( node.body )
+      }
+    } )
     this.depth--
     this.emitLine( '}' )
   }
@@ -1054,26 +1110,31 @@ class Printer {
     const right = this.printExpression( node.right )
     this.emitLine( 'for ' + await_str + '( ' + left + ' of ' + right + ' ) {' )
     this.depth++
-    if ( node.body.type === 'BlockStatement' ) {
-      this.printBlockBody( node.body.body )
-    }
-    else {
-      this.printStatement( node.body )
-    }
+    this.withResetIfDepth( () => {
+      if ( node.body.type === 'BlockStatement' ) {
+        this.printBlockBody( node.body.body )
+      }
+      else {
+        this.printStatement( node.body )
+      }
+    } )
     this.depth--
     this.emitLine( '}' )
   }
 
   printWhileStatement ( node ) {
+    this.checkImplicitTruthy( node.test )
     const condition = this.printExpression( node.test )
     this.emitLine( 'while ( ' + condition + ' ) {' )
     this.depth++
-    if ( node.body.type === 'BlockStatement' ) {
-      this.printBlockBody( node.body.body )
-    }
-    else {
-      this.printStatement( node.body )
-    }
+    this.withResetIfDepth( () => {
+      if ( node.body.type === 'BlockStatement' ) {
+        this.printBlockBody( node.body.body )
+      }
+      else {
+        this.printStatement( node.body )
+      }
+    } )
     this.depth--
     this.emitLine( '}' )
   }
@@ -1081,14 +1142,17 @@ class Printer {
   printDoWhileStatement ( node ) {
     this.emitLine( 'do {' )
     this.depth++
-    if ( node.body.type === 'BlockStatement' ) {
-      this.printBlockBody( node.body.body )
-    }
-    else {
-      this.printStatement( node.body )
-    }
+    this.withResetIfDepth( () => {
+      if ( node.body.type === 'BlockStatement' ) {
+        this.printBlockBody( node.body.body )
+      }
+      else {
+        this.printStatement( node.body )
+      }
+    } )
     this.depth--
     this.emitLine( '}' )
+    this.checkImplicitTruthy( node.test )
     const condition = this.printExpression( node.test )
     this.emitLine( 'while ( ' + condition + ' )' )
   }
@@ -1096,31 +1160,83 @@ class Printer {
   printSwitchStatement ( node ) {
     const discriminant = this.printExpression( node.discriminant )
     this.emitLine( 'switch ( ' + discriminant + ' ) {' )
-    for ( const case_node of node.cases ) {
-      if ( case_node.test ) {
-        this.emitLine( 'case ' + this.printExpression( case_node.test ) + ':' )
+    this.withResetIfDepth( () => {
+      for ( const case_node of node.cases ) {
+        if ( case_node.test ) {
+          this.emitLine( 'case ' + this.printExpression( case_node.test ) + ':' )
+        }
+        else {
+          this.emitLine( 'default:' )
+        }
+        this.depth++
+        this.printBlockBody( case_node.consequent )
+        this.depth--
       }
-      else {
-        this.emitLine( 'default:' )
-      }
-      this.depth++
-      this.printBlockBody( case_node.consequent )
-      this.depth--
-    }
+    } )
     this.emitLine( '}' )
+  }
+
+  checkSwallowedError ( handler ) {
+    if ( handler.param === null || handler.param === undefined ) {
+      return
+    }
+
+    const param_name = handler.param.type === 'Identifier' ? handler.param.name : null
+    if ( param_name === null ) {
+      return
+    }
+
+    const body = handler.body.body
+    const has_throw = this.bodyContainsThrow( body )
+    const has_cause = this.bodyContainsCause( body, param_name )
+
+    if ( has_throw === false && has_cause === false ) {
+      this.warn( 'Swallowed error: catch block does not rethrow or wrap with { cause: ' + param_name + ' }. Rethrow the error or use new Error(msg, { cause: ' + param_name + ' }).' )
+    }
+  }
+
+  bodyContainsThrow ( stmts ) {
+    for ( const stmt of stmts ) {
+      if ( stmt.type === 'ThrowStatement' ) {
+        return true
+      }
+
+      if ( stmt.type === 'IfStatement' ) {
+        if ( stmt.consequent?.body && this.bodyContainsThrow( stmt.consequent.body ) ) {
+          return true
+        }
+
+        if ( stmt.alternate?.body && this.bodyContainsThrow( stmt.alternate.body ) ) {
+          return true
+        }
+      }
+    }
+
+    return false
+  }
+
+  bodyContainsCause ( stmts, param_name ) {
+    const json = JSON.stringify( stmts )
+
+    return json.includes( '"cause"' ) && json.includes( '"' + param_name + '"' )
   }
 
   printTryStatement ( node ) {
     this.emitLine( 'try {' )
     this.depth++
-    this.printBlockBody( node.block.body )
+    this.withResetIfDepth( () => {
+      this.printBlockBody( node.block.body )
+    } )
     this.depth--
     if ( node.handler ) {
+      this.checkSwallowedError( node.handler )
       const param = node.handler.param ? ' ( ' + this.printPattern( node.handler.param ) + ' )' : ''
       this.emitLine( '}' )
       this.emitLine( 'catch' + param + ' {' )
       this.depth++
-      this.printBlockBody( node.handler.body.body )
+      this.withResetIfDepth( () => {
+        this.printBlockBody( node.handler.body.body )
+      } )
       this.depth--
     }
 
@@ -1128,7 +1244,9 @@ class Printer {
       this.emitLine( '}' )
       this.emitLine( 'finally {' )
       this.depth++
-      this.printBlockBody( node.finalizer.body )
+      this.withResetIfDepth( () => {
+        this.printBlockBody( node.finalizer.body )
+      } )
       this.depth--
     }
     this.emitLine( '}' )
@@ -1140,7 +1258,9 @@ class Printer {
 
       return
     }
+    this.chain_prefix_len = 7
     const expr = this.printExpression( node.argument )
+    this.chain_prefix_len = 0
     this.emitLine( 'return ' + expr )
   }
 
@@ -1149,12 +1269,50 @@ class Printer {
     this.emitLine( 'throw ' + expr )
   }
 
+  checkFloatingPromise ( node ) {
+    if ( node.type === 'UnaryExpression' && node.operator === 'void' ) {
+      return
+    }
+
+    if ( node.type === 'AwaitExpression' ) {
+      return
+    }
+
+    if ( this.hasThenWithoutCatch( node ) ) {
+      this.warn( 'Floating promise: .then() without .catch() handler. Add .catch() or use await with try/catch.' )
+    }
+  }
+
+  hasThenWithoutCatch ( node ) {
+    if ( node.type !== 'CallExpression' ) {
+      return false
+    }
+
+    const chain = this.collectPromiseChain( node )
+    const has_then = chain.some( ( name ) => name === 'then' )
+    const has_catch = chain.some( ( name ) => name === 'catch' )
+
+    return has_then && has_catch === false
+  }
+
+  collectPromiseChain ( node ) {
+    const names = []
+    let current = node
+    while ( current.type === 'CallExpression' && current.callee.type === 'MemberExpression' && current.callee.property.type === 'Identifier' ) {
+      names.push( current.callee.property.name )
+      current = current.callee.object
+    }
+
+    return names
+  }
+
   printExpressionStatement ( node ) {
     if ( this.isConsoleLog( node.expression ) ) {
       this.warn( 'Removed console.log call' )
 
       return
     }
+    this.checkFloatingPromise( node.expression )
     const expr = this.printExpression( node.expression )
     this.emitLine( expr )
   }
@@ -1476,7 +1634,89 @@ class Printer {
     return test + NL + inner_indent + '? ' + consequent + NL + inner_indent + ': ' + alternate
   }
 
+  collectChain ( node ) {
+    const segments = []
+    let current = node
+    while ( current.type === 'CallExpression' && current.callee.type === 'MemberExpression' && current.callee.computed === false ) {
+      segments.unshift(
+        { property: current.callee.property
+        , arguments: current.arguments
+        , optional_call: current.optional
+        , optional_member: current.callee.optional
+        }
+      )
+      current = current.callee.object
+    }
+
+    if ( segments.length < 2 ) {
+      return null
+    }
+
+    return { root: current, segments: segments }
+  }
+
+  printChainSegmentArgs ( args ) {
+    if ( args.length === 0 ) {
+      return '()'
+    }
+
+    const has_complex = args.some( ( a ) => this.isObjectOrArrayLiteral( a ) )
+    if ( has_complex && args.length === 1 && this.isObjectOrArrayLiteral( args[0] ) ) {
+      const elm_val = this.printElmStyleValue( args[0] )
+      const inner_indent = this.indent() + INDENT + INDENT
+
+      return '(' + NL + inner_indent + elm_val.split( NL ).join( NL + inner_indent ) + NL + this.indent() + INDENT + ')'
+    }
+
+    const args_str = args.map( ( a ) => this.printExpression( a ) ).join( ', ' )
+
+    return '(' + args_str + ')'
+  }
+
+  checkForEachAsync ( node ) {
+    if ( node.callee.type === 'MemberExpression' && node.callee.property.type === 'Identifier' && node.callee.property.name === 'forEach' ) {
+      const has_async = node.arguments.some( ( a ) => ( a.type === 'ArrowFunctionExpression' || a.type === 'FunctionExpression' ) && a.async === true )
+      if ( has_async ) {
+        this.warn( 'Async forEach: forEach with an async callback does not await iterations. Use for...of with await instead.' )
+      }
+    }
+  }
+
   printCallExpression ( node ) {
+    this.checkForEachAsync( node )
+    if ( this.in_chain === false ) {
+      const chain = this.collectChain( node )
+
+
+      if ( chain != null ) {
+        const root_str = this.printExpression( chain.root )
+        const inline_parts = [ root_str ]
+        for ( const seg of chain.segments ) {
+          const dot = seg.optional_member ? '?.' : '.'
+          const opt = seg.optional_call ? '?.' : ''
+          const prop = this.printExpression( seg.property )
+          const args_str = this.printChainSegmentArgs( seg.arguments )
+          inline_parts.push( dot + prop + opt + args_str )
+        }
+        const single_line = inline_parts.join( '' )
+        if ( single_line.length + this.chain_prefix_len + this.depth * 2 <= MAX_LINE_LENGTH ) {
+          return single_line
+        }
+
+        const chain_indent = this.indent() + INDENT
+        const broken_parts = [ root_str ]
+        for ( const seg of chain.segments ) {
+          const dot = seg.optional_member ? '?.' : '.'
+          const opt = seg.optional_call ? '?.' : ''
+          const prop = this.printExpression( seg.property )
+          const args_str = this.printChainSegmentArgs( seg.arguments )
+          broken_parts.push( NL + chain_indent + dot + prop + opt + args_str )
+        }
+
+        return broken_parts.join( '' )
+      }
+    }
+
     const optional = node.optional ? '?.' : ''
     const callee = this.printExpression( node.callee )
     const args = node.arguments.map( ( a ) => this.printExpression( a ) )
@@ -1494,18 +1734,18 @@ class Printer {
 
     const args_str = args.join( ', ' )
 
-    return callee + optional + '( ' + args_str + ' )'
+    return callee + optional + '(' + args_str + ')'
   }
 
   printNewExpression ( node ) {
     const callee = this.printExpression( node.callee )
     if ( node.arguments.length === 0 ) {
-      return 'new ' + callee + ' ()'
+      return 'new ' + callee + '()'
     }
 
     const args = node.arguments.map( ( a ) => this.printExpression( a ) ).join( ', ' )
 
-    return 'new ' + callee + '( ' + args + ' )'
+    return 'new ' + callee + '(' + args + ')'
   }
 
   printMemberExpression ( node ) {
@@ -1554,7 +1794,14 @@ class Printer {
   printFunctionExpression ( node ) {
     const async_str = node.async ? 'async ' : ''
     const generator_str = node.generator ? '*' : ''
-    const name = node.id ? ' ' + toCamelCase( node.id.name ) : ''
+    const raw_name = node.id ? node.id.name : ''
+    if ( raw_name ) {
+      const expected = toCamelCase( raw_name )
+      if ( expected !== raw_name ) {
+        this.warn( 'Naming: function \'' + raw_name + '\' should be camelCase. Rename to \'' + expected + '\'' )
+      }
+    }
+    const name = node.id ? ' ' + raw_name : ''
     const params = this.printParams( node.params )
     const saved_output = this.output
     this.output = ''
@@ -1787,7 +2034,12 @@ class Printer {
   printClassExpression ( node ) {
     let head = 'class'
     if ( node.id ) {
-      head += ' ' + toPascalCase( node.id.name )
+      const raw_name = node.id.name
+      const expected = toPascalCase( raw_name )
+      if ( expected !== raw_name ) {
+        this.warn( 'Naming: class \'' + raw_name + '\' should be PascalCase. Rename to \'' + expected + '\'' )
+      }
+      head += ' ' + raw_name
     }
 
     if ( node.superClass ) {

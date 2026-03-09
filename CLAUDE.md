@@ -5,10 +5,10 @@ Opinionated, zero-config JavaScript formatter. Deterministic AST printer — par
 ## Project structure
 
 ```
-bin/opinionator.js      CLI entry point
-src/core/parser.js      @babel/parser wrapper
-src/core/printer.js     AST → formatted source
-src/core/format.js      Orchestrates parse → print
+index.js                CLI entry point
+src/parser.js           @babel/parser wrapper
+src/printer.js          AST → formatted source
+src/format.js           Orchestrates parse → print
 test/rules/*.test.js    Per-rule test files
 test/core/              Core integration tests
 test/cli/               CLI test fixtures
@@ -17,8 +17,8 @@ test/cli/               CLI test fixtures
 ## Commands
 
 - **Run tests:** `npm test`
-- **Format a file:** `node bin/opinionator.js <file-or-dir>`
-- **Check without writing:** `node bin/opinionator.js <file-or-dir> --check`
+- **Format a file:** `node index.js <file-or-dir>` or `npm start -- <file-or-dir>`
+- **Check without writing:** `node index.js <file-or-dir> --check`
 
 ## Tech
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { format } from '../../src/core/format.js'
+import { format } from '../../src/format.js'
 
 // ─── Indentation ─────────────────────────────────────────
 
@@ -41,21 +41,21 @@ test('removes use strict with single quotes', async () => {
 // ─── Stroustrup brace style ─────────────────────────────
 
 test('uses Stroustrup brace style for if/else', async () => {
-  const input = `if (x) {\n  a(1)\n} else {\n  b(2)\n}\n`
+  const input = `if (x === true) {\n  a(1)\n} else {\n  b(2)\n}\n`
   const result = await format(input)
-  assert.equal(result.code, `if ( x ) {\n  a( 1 )\n}\nelse {\n  b( 2 )\n}\n`)
+  assert.equal(result.code, `if ( x === true ) {\n  a(1)\n}\nelse {\n  b(2)\n}\n`)
 })
 
 test('uses Stroustrup brace style for try/catch', async () => {
-  const input = `try { foo(1) } catch (err) { bar(err) }\n`
+  const input = `try { foo(1) } catch (err) { throw err }\n`
   const result = await format(input)
-  assert.equal(result.code, `try {\n  foo( 1 )\n}\ncatch ( err ) {\n  bar( err )\n}\n`)
+  assert.equal(result.code, `try {\n  foo(1)\n}\ncatch ( err ) {\n  throw err\n}\n`)
 })
 
 test('uses Stroustrup brace style for try/catch/finally', async () => {
-  const input = `try { a(1) } catch (e) { b(2) } finally { c(3) }\n`
+  const input = `try { a(1) } catch (e) { throw e } finally { c(3) }\n`
   const result = await format(input)
-  assert.equal(result.code, `try {\n  a( 1 )\n}\ncatch ( e ) {\n  b( 2 )\n}\nfinally {\n  c( 3 )\n}\n`)
+  assert.equal(result.code, `try {\n  a(1)\n}\ncatch ( e ) {\n  throw e\n}\nfinally {\n  c(3)\n}\n`)
 })
 
 // ─── Function spacing ───────────────────────────────────
@@ -66,10 +66,10 @@ test('adds space before and inside parentheses in named function declarations', 
   assert.equal(result.code, `function foo ( a, b ) {\n  return a + b\n}\n`)
 })
 
-test('adds spaces inside parens in function calls but not before', async () => {
+test('no spaces inside parens in function calls', async () => {
   const input = `foo(1, 2)\n`
   const result = await format(input)
-  assert.equal(result.code, `foo( 1, 2 )\n`)
+  assert.equal(result.code, `foo(1, 2)\n`)
 })
 
 test('handles empty function params', async () => {
@@ -111,9 +111,9 @@ test('no blank line before return when first/only statement', async () => {
 // ─── One blank line between unrelated blocks ────────────
 
 test('one blank line between unrelated blocks (if/for/try)', async () => {
-  const input = `function foo() {\n  if (a) { x(1) }\n  for (const b of c) { y(2) }\n}\n`
+  const input = `function foo() {\n  if (a === true) { x(1) }\n  for (const b of c) { y(2) }\n}\n`
   const result = await format(input)
-  assert.equal(result.code, `function foo () {\n  if ( a ) {\n    x( 1 )\n  }\n\n  for ( const b of c ) {\n    y( 2 )\n  }\n}\n`)
+  assert.equal(result.code, `function foo () {\n  if ( a === true ) {\n    x(1)\n  }\n\n  for ( const b of c ) {\n    y(2)\n  }\n}\n`)
 })
 
 // ─── Blank line after guard checks ──────────────────────
@@ -129,15 +129,43 @@ test('blank line after guard check', async () => {
 // ─── if/else-if/else ────────────────────────────────────
 
 test('formats if/else-if/else chain', async () => {
-  const input = `if (a) {\n  x(1)\n} else if (b) {\n  y(2)\n} else {\n  z(3)\n}\n`
+  const input = `if (a === 1) {\n  x(1)\n} else if (b === 2) {\n  y(2)\n} else {\n  z(3)\n}\n`
   const result = await format(input)
-  assert.equal(result.code, `if ( a ) {\n  x( 1 )\n}\nelse if ( b ) {\n  y( 2 )\n}\nelse {\n  z( 3 )\n}\n`)
+  assert.equal(result.code, `if ( a === 1 ) {\n  x(1)\n}\nelse if ( b === 2 ) {\n  y(2)\n}\nelse {\n  z(3)\n}\n`)
+})
+
+// ─── Blank line between top-level call expressions ──────
+
+test('blank line between top-level call expressions', async () => {
+  const input = `describe('a', () => { })\ndescribe('b', () => { })\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('})\n\ndescribe'), 'should have blank line between top-level calls')
+})
+
+test('no extra blank line between calls inside a function', async () => {
+  const input = `function foo() {\n  bar(1)\n  baz(2)\n}\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('bar(1)\n  baz(2)'), 'calls inside function should not get extra blank line')
+})
+
+// ─── Chained call breaking ───────────────────────────────
+
+test('breaks long chained calls after dot', async () => {
+  const input = `const result = someObject.firstMethod('arg1').secondMethod('arg2').thirdMethod('arg3').fourthMethod('arg4').fifthMethod('arg5')\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('\n  .'), 'long chain should break after dot')
+})
+
+test('does not break short chained calls', async () => {
+  const input = `const x = arr.map(fn).filter(fn2)\n`
+  const result = await format(input)
+  assert.ok(!result.code.includes('\n  .'), 'short chain should stay inline')
 })
 
 // ─── Idempotency ────────────────────────────────────────
 
 test('formatting is idempotent', async () => {
-  const input = `var myVariable = "hello";\nfunction process_data(x) { return x; }\n`
+  const input = `const my_variable = 'hello'\nfunction processData(x) { return x }\n`
   const result = await format(input)
   const result2 = await format(result.code)
   assert.equal(result2.code, result.code)

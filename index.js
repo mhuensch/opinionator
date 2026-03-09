@@ -147,7 +147,7 @@ async function main() {
     process.exit(2)
   }
 
-  const { format } = await import('../src/core/format.js')
+  const { format } = await import('./src/format.js')
 
   const gitignorePatterns = await loadGitignorePatterns(cwd)
   let files

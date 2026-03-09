@@ -5,9 +5,10 @@
   "type": "module",
   "main": "index.js",
   "bin": {
-    "opinionator": "bin/opinionator.js"
+    "opinionator": "index.js"
   },
   "scripts": {
+    "start": "node index.js",
     "test": "node --test --experimental-test-isolation=none \"test/rules/*.test.js\""
   },
   "repository": {

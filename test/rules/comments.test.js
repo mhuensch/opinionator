@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { format } from '../../src/core/format.js'
+import { format } from '../../src/format.js'
 
 // ─── console.log removal ──────────────────────────────
 

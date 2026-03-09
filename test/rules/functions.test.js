@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { format } from '../../src/core/format.js'
+import { format } from '../../src/format.js'
 
 // ─── Named function spacing ────────────────────────────
 
@@ -18,10 +18,9 @@ test('empty params format correctly', async () => {
 
 // ─── Function name camelCase ────────────────────────────
 
-test('converts snake_case function names to camelCase', async () => {
+test('throws on snake_case function names', async () => {
   const input = `function process_data(x) { return x }\n`
-  const result = await format(input)
-  assert.ok(result.code.includes('function processData'))
+  await assert.rejects(() => format(input), { code: 'NAMING_VIOLATION' })
 })
 
 // ─── Two blank lines between top-level functions ────────
@@ -129,17 +128,38 @@ test('formats named function expressions', async () => {
 
 // ─── Call expression spacing ────────────────────────────
 
-test('function calls have no space before paren but spaces inside', async () => {
+test('function calls have no spaces inside parens', async () => {
   const input = `foo(1, 2)\n`
   const result = await format(input)
-  assert.equal(result.code, `foo( 1, 2 )\n`)
+  assert.equal(result.code, `foo(1, 2)\n`)
 })
 
-test('chained method calls have no space before paren but spaces inside', async () => {
+test('chained method calls have no spaces inside parens', async () => {
   const input = `arr.map(x => x * 2).filter(x => x > 0)\n`
   const result = await format(input)
   assert.ok(result.code.includes('.map('))
   assert.ok(result.code.includes('.filter('))
+})
+
+test('function call inside for-of has no spaces inside call parens', async () => {
+  const input = `for (const entry of readdirSync(dir)) { console.log(entry) }\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('readdirSync(dir)'), 'call parens should have no spaces')
+  assert.ok(result.code.includes('for ( const entry of'), 'for-of parens should have spaces')
+})
+
+test('function call inside if condition has no spaces inside call parens', async () => {
+  const input = `if (statSync(full).isDirectory()) { return true }\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('statSync(full)'), 'call parens should have no spaces')
+  assert.ok(result.code.includes('isDirectory()'), 'empty call parens stay compact')
+  assert.ok(result.code.includes('if ('), 'if parens should have spaces')
+})
+
+test('function call in variable declaration has no spaces inside parens', async () => {
+  const input = `const full = join(dir, entry)\n`
+  const result = await format(input)
+  assert.equal(result.code, `const full = join(dir, entry)\n`)
 })
 
 // ─── Complex call arg extraction ────────────────────────
@@ -148,7 +168,7 @@ test('extracts complex object arg from long call to const', async () => {
   const input = `configure('production', { host: 'localhost', port: 3000, database: 'mydb', username: 'admin', password: 'secret123' })\n`
   const result = await format(input)
   assert.ok(result.code.includes('const options ='), 'object arg should be extracted to const options')
-  assert.ok(result.code.includes("configure( 'production', options )"), 'call should reference extracted variable')
+  assert.ok(result.code.includes("configure('production', options)"), 'call should reference extracted variable')
   assert.ok(result.code.includes("host: 'localhost'"), 'extracted object should contain original properties')
 })
 

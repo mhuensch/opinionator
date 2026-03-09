@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { format } from '../../src/core/format.js'
+import { format } from '../../src/format.js'
 
 const __filename = fileURLToPath ( import.meta.url )
 const __dirname = dirname ( __filename )

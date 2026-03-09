@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { format } from '../../src/core/format.js'
+import { format } from '../../src/format.js'
 
 // ─── node: prefix for built-ins ─────────────────────────
 
@@ -34,6 +34,43 @@ test('preserves file extensions on relative imports', async () => {
   const input = `import { helper } from "./utils.js"\n`
   const result = await format(input)
   assert.ok(result.code.includes('./utils.js'))
+})
+
+test('adds .js extension to relative imports missing extension', async () => {
+  const input = `import { helper } from "./utils"\n`
+  const result = await format(input)
+  assert.equal(result.code, `import { helper } from './utils.js'\n`)
+})
+
+test('adds .js extension to relative imports with subdirectory', async () => {
+  const input = `import { foo } from "../lib/parser"\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('../lib/parser.js'))
+})
+
+test('does not add extension to package imports', async () => {
+  const input = `import express from "express"\n`
+  const result = await format(input)
+  assert.ok(result.code.includes("'express'"))
+  assert.ok(!result.code.includes("express.js"))
+})
+
+test('does not add extension to node: imports', async () => {
+  const input = `import fs from "node:fs"\n`
+  const result = await format(input)
+  assert.equal(result.code, `import fs from 'node:fs'\n`)
+})
+
+test('preserves .mjs and .cjs extensions', async () => {
+  const input = `import { a } from "./config.mjs"\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('./config.mjs'))
+})
+
+test('does not double-add .js extension', async () => {
+  const input = `import { a } from "./mod.js"\n`
+  const result = await format(input)
+  assert.ok(!result.code.includes('.js.js'))
 })
 
 // ─── Import ordering ───────────────────────────────────

@@ -1,13 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { format } from '../../src/core/format.js'
+import { format } from '../../src/format.js'
 
 // ─── Class name: PascalCase ─────────────────────────────
 
-test('converts class names to PascalCase', async () => {
+test('throws on non-PascalCase class names', async () => {
   const input = `class my_class {}\n`
-  const result = await format(input)
-  assert.ok(result.code.includes('class MyClass'))
+  await assert.rejects(() => format(input), { code: 'NAMING_VIOLATION' })
 })
 
 // ─── One blank line after class signature ───────────────
@@ -46,10 +45,9 @@ test('preserves class extends', async () => {
   assert.ok(result.code.includes('class Child extends Parent'))
 })
 
-test('converts extends class name to PascalCase', async () => {
+test('throws on non-PascalCase class name with extends', async () => {
   const input = `class child_class extends Parent {}\n`
-  const result = await format(input)
-  assert.ok(result.code.includes('class ChildClass extends Parent'))
+  await assert.rejects(() => format(input), { code: 'NAMING_VIOLATION' })
 })
 
 // ─── Constructor formatting ────────────────────────────
@@ -70,10 +68,9 @@ test('formats getters', async () => {
 
 // ─── Private methods ───────────────────────────────────
 
-test('formats private method names as _camelCase', async () => {
+test('throws on _snake_case private method names', async () => {
   const input = `class Foo {\n  _process_item(item) {\n    return item.value\n  }\n}\n`
-  const result = await format(input)
-  assert.ok(result.code.includes('_processItem'))
+  await assert.rejects(() => format(input), { code: 'NAMING_VIOLATION' })
 })
 
 // ─── Static methods ────────────────────────────────────
@@ -86,10 +83,9 @@ test('preserves static keyword on methods', async () => {
 
 // ─── Class method spacing ──────────────────────────────
 
-test('method names are camelCase', async () => {
+test('throws on snake_case method names', async () => {
   const input = `class Foo {\n  process_data(x) {\n    return x\n  }\n}\n`
-  const result = await format(input)
-  assert.ok(result.code.includes('processData'))
+  await assert.rejects(() => format(input), { code: 'NAMING_VIOLATION' })
 })
 
 // ─── Empty class ────────────────────────────────────────
