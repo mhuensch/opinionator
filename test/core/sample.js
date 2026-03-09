@@ -1,3 +1,4 @@
+// opinionator-ignore-file
 import fs, { readFile, writeFile } from 'node:fs'
 import path from 'node:path'
 
@@ -14,13 +15,13 @@ const is_ready = true
 const my_config =
   { host: 'localhost'
   , port: 3000
-  , db: { name: 'mydb'
+  , db:
+    { name: 'mydb'
     , pool: 5
     }
   , 'kebab-key': 'value'
   }
-const my_list =
-  [ 1, 2, 3, 4, 5 ]
+const my_list = [ 1, 2, 3, 4, 5 ]
 const nested_array =
   [ { name: 'alice'
     , age: 30
@@ -32,15 +33,15 @@ const nested_array =
 
 
 function processData ( inputData, options ) {
-  if ( !inputData ) {
+  if ( inputData === false ) {
     return null
   }
 
   if ( options == undefined ) {
-    throw new Error ( 'options required' )
+    throw new Error('options required')
   }
 
-  const result = inputData.map ( ( item ) => item.value )
+  const result = inputData.map(( item ) => item.value)
   if ( result.length === 0 ) {
     return []
   }
@@ -70,27 +71,25 @@ class DataProcessor {
 
   constructor ( config ) {
     this.config = config
-    this.cache = new Map ()
+    this.cache = new Map()
   }
 
-
   async fetchData ( url ) {
-    if ( this.cache.has ( url ) ) {
-      return this.cache.get ( url )
+    if ( this.cache.has(url) ) {
+      return this.cache.get(url)
     }
 
     try {
-      const response = await fetch ( url )
-      const data = await response.json (  )
-      this.cache.set ( url, data )
+      const response = await fetch(url)
+      const data = await response.json()
+      this.cache.set(url, data)
 
       return data
     }
     catch ( err ) {
-      throw new Error ( 'Failed to fetch', { cause: err } )
+      throw new Error('Failed to fetch', { cause: err })
     }
   }
-
 
   _processItem ( item ) {
     if ( item.type === 'a' ) {
@@ -104,8 +103,7 @@ class DataProcessor {
     }
   }
 
-
-  get size (  ) {
+  get size () {
     return this.cache.size
   }
 
@@ -115,7 +113,7 @@ class DataProcessor {
 class AdvancedProcessor extends DataProcessor {
 
   constructor ( config, extra ) {
-    super ( config )
+    super(config)
     this.extra = extra
   }
 
@@ -132,7 +130,7 @@ const ternary_example = isReady ? 'yes' : 'no'
 
 
 export async function format ( source, options = {} ) {
-  const result = await processData ( source, options )
+  const result = await processData(source, options)
 
   return result
 }

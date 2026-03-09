@@ -1,3 +1,4 @@
+// opinionator-ignore-file
 const greeting = 'hello world'
 
 
@@ -6,4 +7,4 @@ function add ( a, b ) {
 }
 
 
-const result = add( 1, 2 )
+const result = add(1, 2)

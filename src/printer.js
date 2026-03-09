@@ -1,3 +1,4 @@
+// opinionator-ignore-file
 const NL = '\n'
 const items =
   [ 'assert'
@@ -138,7 +139,11 @@ class Printer {
   }
 
   printProgram ( ast ) {
-    const body = ast.program ? ast.program.body : ast.body
+    const program = ast.program || ast
+    if ( program.interpreter ) {
+      this.emit( '#!' + program.interpreter.value + NL )
+    }
+    const body = program.body
     const sorted_body = this.sortImports( body )
     this.printStatementList( sorted_body, true )
     this.output = this.output.replace( /\n{2,}$/, NL )
@@ -1431,6 +1436,8 @@ class Printer {
       return '( ' + this.printExpression( node.expression ) + ' )'
     case 'ChainExpression':
       return this.printExpression( node.expression )
+    case 'Import':
+      return 'import'
     case 'ImportExpression':
       return 'import ( ' + this.printExpression( node.source ) + ' )'
     case 'Directive':

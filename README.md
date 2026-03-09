@@ -4,10 +4,17 @@ Opinionated formatter based on my coding style for JavaScript.  Opinionator uses
 >The Opinionator does what is objectively correct and does not care about your feelings or preferences.
 
 ## Command Usage
-Installation:
+
+**Installation**
+
 ```
-npm install -g opinionator
+npm install       # install dependencies, chmod +x index.js
+npm link          # registers the 'lunohoco' command globally
+npm start         # node index.js
+npm test          # node index.test.js
 ```
+
+**Once Linked**
 
 Bulk Format:
 ```

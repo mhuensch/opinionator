@@ -1,3 +1,4 @@
+// opinionator-ignore-file
 import { parse } from './parser.js'
 import { print } from './printer.js'
 

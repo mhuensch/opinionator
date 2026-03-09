@@ -1,3 +1,4 @@
+// opinionator-ignore-file
 import { parse as babelParse } from '@babel/parser'
 
 export function parse ( source ) {
@@ -17,5 +18,5 @@ export function parse ( source ) {
     , errorRecovery: false
     }
 
-  return babelParse( source, options )
+  return babelParse(source, options)
 }
