@@ -190,6 +190,12 @@ Naming violations are **not auto-fixed**. The formatter throws a `NAMING_VIOLATI
 - Catch blocks without a parameter are allowed (intentionally ignoring the error)
 
 
+### Comments
+
+- Enforce a space after `//` (`//foo` → `// foo`)
+- No inline trailing comments (`const x = 1 // comment`)
+
+
 ### Logging
 
 - `console.log` calls are automatically removed

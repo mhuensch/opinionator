@@ -111,6 +111,7 @@ class Printer {
     this.if_depth = 0
     this.in_chain = false
     this.chain_prefix_len = 0
+    this.emitted_comments = new Set()
   }
 
   indent () {
@@ -136,6 +137,93 @@ class Printer {
 
   warn ( msg ) {
     this.warnings.push( msg )
+  }
+
+  isCommentEmitted ( comment ) {
+    return this.emitted_comments.has( comment.start )
+  }
+
+  markCommentEmitted ( comment ) {
+    this.emitted_comments.add( comment.start )
+  }
+
+  normalizeLineCommentValue ( value ) {
+    if ( value.length === 0 ) {
+      return value
+    }
+
+    if ( value[0] !== ' ' && value[0] !== '/' && value[0] !== '!' ) {
+      return ' ' + value
+    }
+
+    return value
+  }
+
+  emitCommentText ( comment ) {
+    if ( comment.type === 'CommentLine' ) {
+      this.emitLine( '//' + this.normalizeLineCommentValue( comment.value ) )
+    }
+    else {
+      const lines = comment.value.split( NL )
+      if ( lines.length === 1 ) {
+        this.emitLine( '/*' + comment.value + '*/' )
+      }
+      else {
+        for ( let i = 0; i < lines.length; i++ ) {
+          if ( i === 0 ) {
+            this.emitLine( '/*' + lines[i] )
+          }
+          else if ( i === lines.length - 1 ) {
+            this.emitLine( lines[i] + '*/' )
+          }
+          else {
+            this.emitLine( lines[i] )
+          }
+        }
+      }
+    }
+  }
+
+  emitLeadingComments ( node ) {
+    if ( node.leadingComments == null || node.leadingComments.length === 0 ) {
+      return
+    }
+
+    for ( const comment of node.leadingComments ) {
+      if ( this.isCommentEmitted( comment ) === true ) {
+        continue
+      }
+      this.markCommentEmitted( comment )
+      this.emitCommentText( comment )
+    }
+  }
+
+  emitTrailingComments ( node ) {
+    if ( node.trailingComments == null || node.trailingComments.length === 0 ) {
+      return
+    }
+
+    for ( const comment of node.trailingComments ) {
+      if ( this.isCommentEmitted( comment ) === true ) {
+        continue
+      }
+      this.markCommentEmitted( comment )
+      this.emitCommentText( comment )
+    }
+  }
+
+  emitInnerComments ( node ) {
+    if ( node.innerComments == null || node.innerComments.length === 0 ) {
+      return
+    }
+
+    for ( const comment of node.innerComments ) {
+      if ( this.isCommentEmitted( comment ) === true ) {
+        continue
+      }
+      this.markCommentEmitted( comment )
+      this.emitCommentText( comment )
+    }
   }
 
   printProgram ( ast ) {
@@ -282,6 +370,13 @@ class Printer {
       prev_was_import = curr_is_import
       this.printStatement( stmt )
     }
+
+    if ( stmts.length > 0 ) {
+      const last = stmts[stmts.length - 1]
+      if ( last !== 'BLANK' ) {
+        this.emitTrailingComments( last )
+      }
+    }
   }
 
   findPrevIndex ( stmts, i ) {
@@ -405,7 +500,31 @@ class Printer {
     return false
   }
 
+  emitSameLineTrailingComments ( node ) {
+    if ( node.trailingComments == null || node.trailingComments.length === 0 ) {
+      return
+    }
+
+    if ( node.loc == null ) {
+      return
+    }
+
+    const end_line = node.loc.end.line
+    for ( const comment of node.trailingComments ) {
+      if ( this.isCommentEmitted( comment ) === true ) {
+        continue
+      }
+
+      if ( comment.loc != null && comment.loc.start.line === end_line ) {
+        this.markCommentEmitted( comment )
+        this.emitCommentText( comment )
+      }
+    }
+  }
+
   printStatement ( node ) {
+    this.emitSameLineTrailingComments( node )
+    this.emitLeadingComments( node )
     switch ( node.type ) {
     case 'ImportDeclaration':
       this.printImportDeclaration( node )
@@ -835,12 +954,16 @@ class Printer {
       }
       this.printClassMember( body[i] )
     }
+    if ( body.length > 0 ) {
+      this.emitTrailingComments( body[body.length - 1] )
+    }
     this.emitLine()
     this.depth--
     this.emitLine( '}' )
   }
 
   printClassMember ( node ) {
+    this.emitLeadingComments( node )
     if ( node.type === 'ClassMethod' || node.type === 'ClassPrivateMethod' ) {
       this.printClassMethod( node )
     }
@@ -1167,6 +1290,7 @@ class Printer {
     this.emitLine( 'switch ( ' + discriminant + ' ) {' )
     this.withResetIfDepth( () => {
       for ( const case_node of node.cases ) {
+        this.emitLeadingComments( case_node )
         if ( case_node.test ) {
           this.emitLine( 'case ' + this.printExpression( case_node.test ) + ':' )
         }
