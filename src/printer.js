@@ -169,15 +169,19 @@ class Printer {
         this.emitLine( '/*' + comment.value + '*/' )
       }
       else {
+        const source_col = ( comment.loc != null ) ? comment.loc.start.column : 0
+        const strip_prefix = ' '.repeat( source_col )
         for ( let i = 0; i < lines.length; i++ ) {
           if ( i === 0 ) {
             this.emitLine( '/*' + lines[i] )
           }
           else if ( i === lines.length - 1 ) {
-            this.emitLine( lines[i] + '*/' )
+            const stripped = lines[i].startsWith( strip_prefix ) ? lines[i].slice( source_col ) : lines[i].trimStart()
+            this.emitLine( stripped + '*/' )
           }
           else {
-            this.emitLine( lines[i] )
+            const stripped = lines[i].startsWith( strip_prefix ) ? lines[i].slice( source_col ) : lines[i].trimStart()
+            this.emitLine( stripped )
           }
         }
       }
@@ -264,7 +268,7 @@ class Printer {
       return body
     }
 
-    const merged = this.mergeImports( imports )
+    const merged = this.removeUnusedImports( this.mergeImports( imports ), rest )
     const builtins = []
     const external = []
     const internal = []
@@ -323,6 +327,85 @@ class Printer {
     for ( const entry of by_source.values() ) {
       entry.node.specifiers = entry.specifiers
       result.push( entry.node )
+    }
+
+    return result
+  }
+
+  walkNode ( node, used_ids ) {
+    if ( node === null || node === undefined || typeof node !== 'object' ) {
+      return
+    }
+
+    if ( Array.isArray( node ) ) {
+      for ( const item of node ) {
+        this.walkNode( item, used_ids )
+      }
+
+      return
+    }
+
+    if ( node.type === 'Identifier' ) {
+      used_ids.add( node.name )
+    }
+
+    for ( const key of Object.keys( node ) ) {
+      if ( key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'leadingComments' || key === 'trailingComments' || key === 'innerComments' ) {
+        continue
+      }
+
+      const child = node[key]
+      if ( child !== null && typeof child === 'object' ) {
+        this.walkNode( child, used_ids )
+      }
+    }
+  }
+
+  collectUsedIdentifiers ( rest ) {
+    const used_ids = new Set ()
+    for ( const node of rest ) {
+      this.walkNode( node, used_ids )
+    }
+
+    return used_ids
+  }
+
+  removeUnusedImports ( imports, rest ) {
+    if ( rest.length === 0 ) {
+      return imports
+    }
+
+    const used_ids = this.collectUsedIdentifiers( rest )
+    const result = []
+    for ( const imp of imports ) {
+      const specifiers = imp.specifiers || []
+      if ( specifiers.length === 0 ) {
+        result.push( imp )
+        continue
+      }
+
+      const kept = specifiers.filter( function ( s ) {
+        if ( s.type === 'ImportDefaultSpecifier' ) {
+          return used_ids.has( s.local.name )
+        }
+
+        if ( s.type === 'ImportNamespaceSpecifier' ) {
+          return used_ids.has( s.local.name )
+        }
+
+        if ( s.type === 'ImportSpecifier' ) {
+          return used_ids.has( s.local.name )
+        }
+
+        return true
+      } )
+
+      if ( kept.length === 0 ) {
+        continue
+      }
+
+      imp.specifiers = kept
+      result.push( imp )
     }
 
     return result
@@ -1914,6 +1997,10 @@ class Printer {
     if ( this.isObjectOrArrayLiteral( node.body ) ) {
       const val = this.printElmStyleValue( node.body )
       const inner_indent = this.indent() + INDENT
+
+      if ( node.body.type === 'ObjectExpression' ) {
+        return async_str + params_str + ' => (' + NL + inner_indent + val.split( NL ).join( NL + inner_indent ) + NL + this.indent() + ')'
+      }
 
       return async_str + params_str + ' =>' + NL + inner_indent + val.split( NL ).join( NL + inner_indent )
     }

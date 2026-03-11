@@ -140,6 +140,13 @@ test('comment preservation is idempotent', async (  ) => {
   assert.equal(pass1.code, pass2.code)
 })
 
+test('JSDoc block comment indentation is idempotent', async (  ) => {
+  const input = `/**\n * Top-level JSDoc\n * @param x - the value\n * @returns {Object}\n */\nfunction doThing ( x ) {\n  /**\n   * Inner JSDoc\n   * @returns {number}\n   */\n  return x\n}\n`
+  const pass1 = await format(input)
+  const pass2 = await format(pass1.code)
+  assert.equal(pass1.code, pass2.code)
+})
+
 test('does not duplicate comments across formatting passes', async (  ) => {
   const input = `// only once\nconst x = 1\n`
   const result = await format(input)

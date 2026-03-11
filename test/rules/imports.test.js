@@ -138,3 +138,60 @@ test('preserves namespace imports', async (  ) => {
   const result = await format(input)
   assert.ok(result.code.includes('* as utils'))
 })
+
+test('removes unused named import', async (  ) => {
+  const input = `import { foo } from './mod.js'\nconst x = 1\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('foo') === false)
+})
+
+test('keeps used named import', async (  ) => {
+  const input = `import { foo } from './mod.js'\nconst x = foo()\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('foo'))
+})
+
+test('removes unused default import', async (  ) => {
+  const input = `import Foo from './mod.js'\nconst x = 1\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('Foo') === false)
+})
+
+test('keeps used default import', async (  ) => {
+  const input = `import Foo from './mod.js'\nconst x = new Foo()\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('Foo'))
+})
+
+test('always keeps side-effect import even with other code', async (  ) => {
+  const input = `import './setup.js'\nconst x = 1\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('./setup.js'))
+})
+
+test('removes unused specifiers but keeps used ones', async (  ) => {
+  const input = `import { foo, bar, baz } from './mod.js'\nconst x = bar()\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('bar'))
+  assert.ok(result.code.includes('foo') === false)
+  assert.ok(result.code.includes('baz') === false)
+})
+
+test('removes entire import when all specifiers unused', async (  ) => {
+  const input = `import { foo, bar } from './mod.js'\nconst x = 1\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('./mod.js') === false)
+})
+
+test('removes unused namespace import', async (  ) => {
+  const input = `import * as utils from './utils.js'\nconst x = 1\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('utils') === false)
+  assert.ok(result.code.includes('./utils.js') === false)
+})
+
+test('keeps used namespace import', async (  ) => {
+  const input = `import * as utils from './utils.js'\nconst x = utils.helper()\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('* as utils'))
+})

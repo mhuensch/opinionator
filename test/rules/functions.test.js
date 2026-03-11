@@ -155,3 +155,10 @@ test('does not extract complex arg from short call', async (  ) => {
   const result = await format(input)
   assert.ok(result.code.includes('const options') === false, 'short call should not have extracted variable')
 })
+
+test('arrow function returning object literal is wrapped in parens', async (  ) => {
+  const input = `const result = items.map(item => ({ symbol: item.symbol, value: item.value }))\n`
+  const result = await format(input)
+  assert.ok(result.code.includes('=> ('), 'object literal return must be wrapped in parens')
+  assert.ok(result.code.includes('{ symbol:'), 'object body should be present')
+})
